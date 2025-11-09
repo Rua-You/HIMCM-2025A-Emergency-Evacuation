@@ -1,0 +1,4 @@
+1. We simplify the building structure into node-and-path diagrams. (Justification: responders walk along the corridors and minor deviations like one or two meters won't impact the model too much)
+2. Every room has a "level of furnitures". If this number is low, it means there are not much furnitures in the room and responders only need to glance at the door to see if anyone's inside (e.g. dance rooms). If this number is high, it means there are a lots of furnitures that will block the reponder's view and they need to walk inside to ensure no one is trapped (e.g. offices with lots of desks). This number will impact how long it takes a responder to sweep a room.
+3. We assume there are not much furnitures in the corridors and responders can clear them just by walking through.
+4. "Danger zones" are areas where the emergency (e.g. fire) has spread to. Responders cannot enter or pass through them. Danger zones expand as time passes.
