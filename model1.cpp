@@ -13,7 +13,8 @@ const float AVG_WALKING_SPD = 1.56;
 
 const int N = 5e3 + 5, M = 3e4 + 5;
 
-int n = 0, n_r = 0, n_rsp = 0; // number of nodes, number of rooms, number of responders
+// number of nodes, rooms, responders, teams
+int n = 0, n_r = 0, n_rsp = 0, n_t = 0; 
 int edge_cnt, head[N * 2];
 int cleared_room_cnt = 0; // we define a room as cleared if it has been sweeped twice
 
@@ -48,21 +49,20 @@ void add(int u, int v, float w){
 
 struct Responder{
     bool is_man;
-    float height, t = 0; // t: total time spent
-    int id, init_pos, pos; // node index, initalized to starting position
-    
-    bool operator < (const Responder& other) const {
+    float height;
+};
+
+struct Team{
+    int n, id; // number of responders, team id
+    float t, init_pos, pos; // total time spent, initial position, current position
+    Responder rsp[10];
+
+    bool operator < (const Team& other) const {
         return t > other.t;
     }
 };
-std::vector<Responder> init_rsp;
-std::priority_queue<Responder> rsp_pq;
-
-struct Team{
-    int n;
-    enum Mode { BUDDY, STICK } mode;
-    Responder rsp[10];
-}t[N];
+std::vector<Team> init_t_pq;
+std::priority_queue<Team> t_pq;
 
 // TODO
 float GetResponderSpeed(){
@@ -70,7 +70,8 @@ float GetResponderSpeed(){
 }
 
 float GetSweepRoomTime(Room r){
-    float t = r.area() / 4.0 * sqrt(r.level_furnuture);
+    float avg_spd = 1.56;
+    float t = r.perimeter() / avg_spd * sqrt(r.level_furnuture);
     // base time = 4.0 if room is empty (level_of_furnuture = 0)
     return std::max(t, 4.0f);
 }
@@ -79,6 +80,7 @@ void Init(){
     // initialize the graph (simplification of building layout)
     std::cin >> n;
 
+    // nodes information
     for (int i = 1; i <= n; i++){
         // read node info
         int t;
@@ -104,6 +106,7 @@ void Init(){
         }
     }
 
+    // How the nodes are connected
     int m; // number of edges
     std::cin >> m;
     for (int i = 1; i <= m; i++){
@@ -114,17 +117,30 @@ void Init(){
         add(v, u, w);
     }
 
-    std::cin >> n_rsp;
-    for (int i = 1; i <= n_rsp; i++){
-        // read responder info
-        int g, sp;
-        float h;
-        std::cin >> g >> h >> sp;
-        Responder responder;
-        responder.id = i, responder.is_man = g, responder.height = h;
-        responder.init_pos = responder.pos = sp, responder.t = 0;
-        init_rsp.push_back(responder);
-        rsp_pq.push(responder);
+    // responders & teams information
+    std::cin >> n_t;
+    for (int i = 1; i <= n_t; i++){
+        int sp = -1, rsp_cnt = 0;
+        Team t;
+
+        std::cin >> rsp_cnt >> sp; // number of responders in team j, starting position
+        n_rsp += rsp_cnt;
+
+        t.n = rsp_cnt, t.id = i;
+        t.init_pos = sp, t.pos = sp, t.t = 0;
+
+        for (int j = 0; j < rsp_cnt; j++){
+            // individual responder info
+            int g; // gender, starting position
+            float h; // height
+            std::cin >> g >> h;
+            Responder responder;
+            responder.is_man = g, responder.height = h;
+            t.rsp[j] = responder;
+        }
+
+        init_t_pq.push_back(t);
+        t_pq.push(t);
     }
 }
 
@@ -135,9 +151,9 @@ void Reset(){
         r[i].sweeped_cnt = 0;
     }
 
-    while (!rsp_pq.empty()) rsp_pq.pop();
-    for (int i = 0; i < n_rsp; i++){
-        rsp_pq.push(init_rsp[i]);
+    while (!t_pq.empty()) t_pq.pop();
+    for (int i = 0; i < n_t; i++){
+        t_pq.push(init_t_pq[i]);
     }
 }
 
@@ -170,27 +186,27 @@ void DijkstraLenToExit(){
 }
 
 float Exit(){
-    // all responders exit the building, return the time taken for the last responder to exit
+    // all teams exit the building, return the time taken for the last team to exit
     float max_t = 2e9;
 
-    while (!rsp_pq.empty()){
-        Responder rsp = rsp_pq.top();
-        rsp_pq.pop();
-        int pos = rsp.pos;
-        rsp.t += a[pos].len_to_exit / GetResponderSpeed();
-        max_t = std::min(max_t, rsp.t);
+    while (!t_pq.empty()){
+        Team t = t_pq.top();
+        t_pq.pop();
+        int pos = t.pos;
+        t.t += a[pos].len_to_exit / GetResponderSpeed();
+        max_t = std::min(max_t, t.t);
 
-        std::cout << "Responder " << rsp.id << " exits with time " << rsp.t << std::endl;
+        std::cout << "Team " << t.id << " exits with time " << t.t << std::endl;
     }
 
     avg_t += max_t;
     return max_t;
 }
 
-bool DijkstraToNearestUnvisitedNode(Responder& rsp){
+bool DijkstraToNearestUnvisitedNode(Team& t){
     std::priority_queue<std::pair<float, int>, std::vector<std::pair<float, int>>, std::greater<std::pair<float, int>>> q;
     bool visited[N * 2] = {0};
-    q.push({0, rsp.pos});
+    q.push({0, t.pos});
 
     while (!q.empty()){
         auto [dist, u] = q.top();
@@ -199,10 +215,10 @@ bool DijkstraToNearestUnvisitedNode(Responder& rsp){
         if (visited[u]) continue;
         visited[u] = 1;
         
-        if (!vis[rsp.id][u] && a[u].type == Node::CORRIDOR){
+        if (!vis[t.id][u] && a[u].type == Node::CORRIDOR){
             // found the nearest unvisited corridor node
-            rsp.t += dist / GetResponderSpeed();
-            rsp.pos = u;
+            t.t += dist / GetResponderSpeed();
+            t.pos = u;
             return true;
         }
 
@@ -225,23 +241,23 @@ void Simulation(){
     // when building not cleared
     while(cleared_room_cnt < n_r){
         // move the next responder with least time spent
-        Responder rsp = rsp_pq.top();
-        rsp_pq.pop();
+        Team t = t_pq.top();
+        t_pq.pop();
 
-        int pos = rsp.pos, i = rsp.id;
+        int pos = t.pos, i = t.id;
         bool moved = false;
         vis[i][pos] = true;
         
-        // check all connected nodes. If there is an uncleared room that hasn't been sweeped by this responder, go sweep it
+        // check all connected nodes. If there is an uncleared room that hasn't been sweeped by this team, go sweep it
         for (int j = head[pos]; j; j = e[j].nxt){
             int v = e[j].to;
             if (a[v].type == Node::ROOM && !vis[i][v] && r[a[v].room].sweeped_cnt < 2){
                 vis[i][v] = true;
                 int room_idx = a[v].room;
                 float sweep_time = GetSweepRoomTime(r[room_idx]);
-                rsp.t += sweep_time + 2 * e[j].len / GetResponderSpeed(); // time to sweep + time to enter and exit
+                t.t += sweep_time + 2 * e[j].len / GetResponderSpeed(); // time to sweep + time to enter and exit
                 r[room_idx].sweeped_cnt++;
-                if (r[room_idx].sweeped_cnt == 2)
+                if (r[room_idx].sweeped_cnt == 1)
                     cleared_room_cnt++;
                 moved = true;
                 break;
@@ -263,23 +279,23 @@ void Simulation(){
             if (cnt_tmp > 0){
                 // randomly choose one node to move to
                 int nxt_id = 1 + rand() % cnt_tmp;
-                rsp.t += nxt_nd[nxt_id][1] / GetResponderSpeed(); // time to move
-                rsp.pos = nxt_nd[nxt_id][0];
+                t.t += nxt_nd[nxt_id][1] / GetResponderSpeed(); // time to move
+                t.pos = nxt_nd[nxt_id][0];
             }
             else {
                 // go to nearest unvisited node
-                bool found = DijkstraToNearestUnvisitedNode(rsp);
+                bool found = DijkstraToNearestUnvisitedNode(t);
                 if (!found){
                     // all nodes have been visited, exit the building
-                    rsp.t += a[pos].len_to_exit / GetResponderSpeed();
-                    rsp.pos = -1; // indicate exited
+                    t.t += a[pos].len_to_exit / GetResponderSpeed();
+                    t.pos = -1; // indicate exited
                 }
             }
         }
 
-        std::cout << "Responder " << i << " at node " << rsp.pos << " with time " << rsp.t << std::endl;
-        if (rsp.pos != -1) // still in building
-            rsp_pq.push(rsp);
+        std::cout << "Team " << i << " at node " << t.pos << " with time " << t.t << std::endl;
+        if (t.pos != -1) // still in building
+            t_pq.push(t);
     }
 
     float time = Exit();
