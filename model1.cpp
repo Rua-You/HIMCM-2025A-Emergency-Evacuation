@@ -19,16 +19,16 @@ int cleared_room_cnt = 0; // we define a room as cleared if it has been sweeped 
 
 float avg_t = 0;
 
-struct Room {
+struct Room{
     float length, width;
-    int level_furnuture;
+    float level_furnuture;
     int sweeped_cnt; // number of times the room has been sweeped
     float area() { return length * width; }
     float perimeter() { return 2 * (length + width); }
 }r[N];
 bool vis[M][N * 2];
 
-struct Node {
+struct Node{
     int nxt, to;
 
     enum Type { ROOM, CORRIDOR, STAIRWELL, EXIT } type;
@@ -36,7 +36,7 @@ struct Node {
     float len_to_exit = 2e9; // length to nearest exit, initialized to infinity
 }a[N * 2];
 
-struct Edge {
+struct Edge{
     int nxt, to;
     float len;
 }e[N * 4];
@@ -46,7 +46,7 @@ void add(int u, int v, float w){
     head[u] = edge_cnt;
 }
 
-struct Responder {
+struct Responder{
     bool is_man;
     float height, t = 0; // t: total time spent
     int id, init_pos, pos; // node index, initalized to starting position
@@ -58,6 +58,11 @@ struct Responder {
 std::vector<Responder> init_rsp;
 std::priority_queue<Responder> rsp_pq;
 
+struct Team{
+    int n;
+    enum Mode { BUDDY, STICK } mode;
+    Responder rsp[10];
+}t[N];
 
 // TODO
 float GetResponderSpeed(){
@@ -65,15 +70,13 @@ float GetResponderSpeed(){
 }
 
 float GetSweepRoomTime(Room r){
-    int t = 4; // base time if room is empty
-    if (r.level_furnuture == 0)
-        return t;
-    t += (r.perimeter() - 4) * sqrt(r.level_furnuture) / AVG_WALKING_SPD ; // each level of furniture adds 10% time per area
-    return t; // 10% fluctuation
+    float t = r.area() / 4.0 * sqrt(r.level_furnuture);
+    // base time = 4.0 if room is empty (level_of_furnuture = 0)
+    return std::max(t, 4.0f);
 }
 
-// initialize the graph (simplification of building layout)
 void Init(){
+    // initialize the graph (simplification of building layout)
     std::cin >> n;
 
     for (int i = 1; i <= n; i++){
@@ -166,8 +169,8 @@ void DijkstraLenToExit(){
     }
 }
 
-// all responders exit the building, return the time taken for the last responder to exit
 float Exit(){
+    // all responders exit the building, return the time taken for the last responder to exit
     float max_t = 2e9;
 
     while (!rsp_pq.empty()){
@@ -285,7 +288,7 @@ void Simulation(){
     std::cout.flush();
 }
 
-int main() {
+int main(){
     freopen("2.in", "r", stdin);
     freopen("2.out", "w", stdout);
 
