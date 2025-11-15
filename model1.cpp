@@ -91,13 +91,13 @@ float GetResponderSpd(){
     return AVG_WALKING_SPD;
 }
 
-bool InIDLH(const Team &t, const Node &x){
+bool InIDLH(int time, const Node &x){
     /* 
-     * if the team is under immediate dangerous to life and health conditions
+     * if the node at that time is under immediate dangerous to life and health conditions
      * this includes fire and smoke spread.
      */
     
-    return t.t >= x.on_fire_at || t.t >= x.has_smoke_at;
+    return time >= x.on_fire_at || time >= x.has_smoke_at;
 }
 
 float GetSweepRoomTime(const Team &t, const Node &x){
@@ -316,6 +316,7 @@ float Exit(){
 
 bool DijkstraToNearestUnvisitedNode(Team &t, bool onSameFloor){
     // return true if there is a node to go to, otherwise false
+    // the nodes are compared using time spent to get there, not nearest distance
     std::priority_queue<std::pair<float, int>, std::vector<std::pair<float, int>>, std::greater<std::pair<float, int>>> q;
     bool visited[N * 2] = {0};
     q.push({0, t.pos});
@@ -323,7 +324,7 @@ bool DijkstraToNearestUnvisitedNode(Team &t, bool onSameFloor){
     const int fl = a[t.pos].fl; // the floor they must stay on
 
     while (!q.empty()){
-        auto [dist, u] = q.top();
+        auto [time, u] = q.top();
         q.pop();
         
         if (visited[u]) continue;
@@ -331,7 +332,7 @@ bool DijkstraToNearestUnvisitedNode(Team &t, bool onSameFloor){
         
         if (!vis[t.id][u]){
             // found the nearest unvisited node
-            t.t += dist / GetResponderSpd();
+            t.t += time;
             t.pos = u;
             return true;
         }
@@ -341,9 +342,12 @@ bool DijkstraToNearestUnvisitedNode(Team &t, bool onSameFloor){
             // the node is unvisted, hasn't been sweeped, and check if on the same floor
             if (!visited[v] && ((a[v].type == Node::ROOM && a[v].sweeped_cnt < ROOM_CLEARED_CNT) || 
                 (a[v].sweeped_cnt < 1)) && ((onSameFloor && a[v].fl == fl) || (!onSameFloor))){
-                // distance times multiplier if this is going upstairs.
-                const float mult = (a[v].fl - a[u].fl == 1) ? UPSTAIRS_MULT : 1.0;
-                q.push({dist + e[i].len * mult, v});
+                // multiplier if this is going upstairs or in IDLH.
+                float mult = (a[v].fl - a[u].fl == 1) ? UPSTAIRS_MULT : 1;
+                float new_t = time + e[i].len * mult;
+                mult *= (InIDLH(time, a[u]) || InIDLH(new_t, a[v])) ? IDLH_MULT : 1;
+                new_t = time + e[i].len * mult;
+                q.push({new_t, v});
             }
         }
     }
@@ -375,7 +379,7 @@ float Simulation(){
                 // time to sweep + time to enter and exit
                 float time_taken = GetSweepRoomTime(t, a[v]) + 2 * e[j].len / GetResponderSpd();
                 // if in IDLH, take more time
-                time_taken *= (InIDLH(t, a[v]) || InIDLH(t, a[u])) ? IDLH_MULT : 1;
+                time_taken *= (InIDLH(t.t, a[v]) || InIDLH(t.t, a[u])) ? IDLH_MULT : 1;
                 t.t += time_taken;
                 a[v].sweeped_cnt++;
                 if (a[v].sweeped_cnt == ROOM_CLEARED_CNT)
