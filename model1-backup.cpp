@@ -71,7 +71,7 @@ float GetSweepRoomTime(Room r){
     return std::max(t, 4.0f);
 }
 
-void Init(){
+void Input(){
     // initialize the graph (simplification of building layout)
     std::cin >> n;
 
@@ -288,7 +288,7 @@ int main(){
     freopen("2.in", "r", stdin);
     freopen("2.out", "w", stdout);
 
-    Init();
+    Input();
     DijkstraLenToExit();
 
     for (int i = 1 ; i <= 100; i++){
